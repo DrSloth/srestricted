@@ -1,3 +1,13 @@
+//! A create for creating and managing size restricted collections.
+//!
+//! This crate can realise size restricted collections whichs len is clamped in between a MIN and MAX value.
+//! Those values are set with const generics. There are simple cases like [NonEmpty] to realise never empty collections in safe code.
+//! The main type of the crate is the [SizeRestricted] struct which handles the size restriction of the collection.
+//!
+//! If you want to use your own collection type with SizeRestricted you just have to implement the [LinearSizedCollection] trait.
+
+#![cfg_attr(not(feature="std"), no_std)]
+
 extern crate alloc;
 
 pub mod test;
@@ -6,10 +16,11 @@ mod collections;
 
 pub use collections::*;
 
-use core::marker::PhantomData;
-use std::ops::Deref;
+use core::{marker::PhantomData, ops::Deref};
 
+/// A never empty linear sized collection
 pub type NonEmpty<T, C> = SizeRestricted<T, C, 1, { usize::MAX }>;
+/// A collection which has an exact amount of elements which can't change
 pub type ExactSized<T, C, const SIZE: usize> = SizeRestricted<T, C, SIZE, SIZE>;
 
 /// A trait for linear collections which have a determinable size at any given point in time.
@@ -43,18 +54,17 @@ pub trait LinearSizedCollection<T> {
     {
         self.extend_to_with(len, || val.clone())
     }
-    /// Extend this collection to the size given by len. The collection should be  filled by consecutively generating values with the
-    /// function f. By default this function pushes the generated values using [push](LinearSizedCollection::push)
-    /// This function is lazy no value is generated (f isn't called) unless the value is needed. The values also are generated
-    /// for every new element, you can thus generate values with a mutable closure. It is not recommended to use if the computation always
-    /// generates the same result AND is expensive
-    fn extend_to_with<F: FnMut() -> T>(&mut self, len: usize, mut f: F)
+    /// Extends the linear collection to `len` by consecutively calling `fill` for every filled value. The values should be appended to the end.
+    ///
+    /// Fill is called for every added element, this means you can create generator like closures.
+    /// You should use [extend_to](LinearSizedCollection::extend_to) if the value is always the same and expensive to compute but not to clone.
+    fn extend_to_with<F: FnMut() -> T>(&mut self, len: usize, mut fill: F)
     where
         Self: Sized,
     {
         self.reserve(len.saturating_sub(self.len()));
         for _ in self.len()..len {
-            self.push(f());
+            self.push(fill());
         }
     }
     /// Try to reserve more space for at least additional more elements. Every push after calling this should be O(1).
@@ -90,9 +100,19 @@ pub enum SizeRangeError {
     TooSmall,
 }
 
+impl core::fmt::Display for SizeRangeError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::TooLarge => write!(f, "Too Large"),
+            Self::TooSmall => write!(f, "Too Small"),
+        }
+    }
+}
+
 /// A wrapper around a [LinearSizedCollection] to restricts its size. The [length](LinearSizedCollection::len) is ensured
-/// to be between MIN and MAX including both MIN and MAX. 
+/// to be between MIN and MAX including both MIN and MAX.
 #[derive(PartialEq, Eq, PartialOrd, Ord, Debug, Clone, Hash)]
+#[cfg_attr(feature="impl_serde", derive(serde::Serialize))]
 pub struct SizeRestricted<T, C: LinearSizedCollection<T>, const MIN: usize, const MAX: usize> {
     /// The inner collection whichs size is restricted
     collection: C,
@@ -107,12 +127,15 @@ impl<T, C: LinearSizedCollection<T>, const MIN: usize, const MAX: usize>
     pub fn new(collection: C) -> Result<Self, (SizeRangeError, C)> {
         match Self::check_fit(&collection) {
             Ok(_) => Ok(unsafe { Self::create(collection) }),
-            Err(e) => Err((e, collection))
+            Err(e) => Err((e, collection)),
         }
     }
 
     /// Creates a new instance of Self while making collection fit into the restriction using [Self::make_fit](SizeRestricted::make_fit)
-    pub fn new_fit(mut collection: C) -> Self where T: Default {
+    pub fn new_fit(mut collection: C) -> Self
+    where
+        T: Default,
+    {
         Self::make_fit(&mut collection);
         unsafe { Self::create(collection) }
     }
@@ -130,12 +153,21 @@ impl<T, C: LinearSizedCollection<T>, const MIN: usize, const MAX: usize>
         }
     }
 
-    /// Makes the given collection fit into the size restriction
-    pub fn make_fit(collection: &mut C) where T: Default {
+    /// Makes the given collection fit into the size restriction. Uses [Default::default] for extending with [SizeRestricted::make_fit_with]
+    pub fn make_fit(collection: &mut C)
+    where
+        T: Default,
+    {
+        Self::make_fit_with(collection, Default::default)
+    }
+
+    /// Makes the given collection fit into the size restriction. Uses `fill` to extend the collection with [LinearSizedCollection::extend_to_with]
+    /// if the collection is to small
+    pub fn make_fit_with<F: FnMut() -> T>(collection: &mut C, fill: F) {
         match Self::check_fit(collection) {
-            Ok(()) => {},
+            Ok(()) => {}
             Err(SizeRangeError::TooLarge) => collection.shrink_to(MIN),
-            Err(SizeRangeError::TooSmall) => collection.extend_to_with(MAX, Default::default),
+            Err(SizeRangeError::TooSmall) => collection.extend_to_with(MAX, fill),
         }
     }
 
@@ -155,26 +187,31 @@ impl<T, C: LinearSizedCollection<T>, const MIN: usize, const MAX: usize>
         }
     }
 
+    /// Get a immutable reference to the inner collection
     pub fn inner(&self) -> &C {
         &self.collection
     }
 
+    /// Get a mutable reference to the inner collection
+    ///
+    /// This function is marked unsafe because mutating the length of the collection in away that leaves the MIN..=MAX range
+    /// may cause undefined behavior. Generally [mutate](SizeRestricted::mutate) should be preferred.
     pub unsafe fn inner_mut(&mut self) -> &mut C {
         &mut self.collection
     }
 
+    /// Mutate the inner collection directly with the `mutator` function.
+    ///
+    /// The size range may be violated inside the mutator function and the collection is made fitting after `mutator` got executed.
+    /// The resizing of the collection is done with [make_fit_with](SizeRestricted::make_fit_with) using `fill` as filling function.
     pub fn mutate(&mut self, fill: impl FnMut() -> T, mut mutator: impl FnMut(&mut C)) {
         mutator(&mut self.collection);
 
-        // Store the len because the calculation is potentially expensive
-        let len = self.collection.len();
-        if len > MAX {
-            self.collection.shrink_to(MAX)
-        } else if len < MIN {
-            self.collection.extend_to_with(MIN, fill)
-        }
+        Self::make_fit_with(&mut self.collection, fill);
     }
 
+    /// Push an element to the collections. Returns [Ok] if pushing the element doesn't violate the size restriction,
+    /// returns ([SizeRangeError::TooLarge], val) on error
     pub fn push(&mut self, val: T) -> Result<(), (SizeRangeError, T)> {
         if self.collection.len() == MAX {
             Err((SizeRangeError::TooLarge, val))
@@ -184,6 +221,7 @@ impl<T, C: LinearSizedCollection<T>, const MIN: usize, const MAX: usize>
         }
     }
 
+    /// Pops an element if the size restriction doesn't get violated by the pop.
     pub fn pop(&mut self) -> Option<T> {
         if self.collection.len() == MIN {
             None
@@ -192,10 +230,12 @@ impl<T, C: LinearSizedCollection<T>, const MIN: usize, const MAX: usize>
         }
     }
 
+    /// Unwraps the inner collection and lifts the size restriction
     pub fn into_inner(self) -> C {
         self.collection
     }
 
+    /// Get an immutable view into the collection
     pub fn view(&self) -> &<C as Deref>::Target
     where
         C: Deref,
@@ -203,6 +243,9 @@ impl<T, C: LinearSizedCollection<T>, const MIN: usize, const MAX: usize>
         &self.collection
     }
 
+    /// Get a mutable view into the collection.
+    ///
+    /// This is implemented with the [ViewMut] trait refer to it for more information on safety
     pub fn view_mut<'a>(&'a mut self) -> <C as ViewMut>::MutableView
     where
         C: ViewMut<'a>,
@@ -211,6 +254,7 @@ impl<T, C: LinearSizedCollection<T>, const MIN: usize, const MAX: usize>
     }
 }
 
+/// Creates a SizeRestricted collection with a size of `MIN`
 impl<T, C, const MIN: usize, const MAX: usize> Default for SizeRestricted<T, C, MIN, MAX>
 where
     C: LinearSizedCollection<T> + Default,
@@ -220,5 +264,19 @@ where
         let mut collection = C::default();
         collection.extend_to_with(MIN, Default::default);
         unsafe { Self::create(collection) }
+    }
+}
+
+#[cfg(feature="impl_serde")]
+impl<'de, T, C: LinearSizedCollection<T>, const MIN: usize, const MAX: usize> serde::Deserialize<'de>
+    for SizeRestricted<T, C, MIN, MAX>
+where
+    C: serde::Deserialize<'de>,
+{
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+            D: serde::Deserializer<'de> {
+        let collection = C::deserialize(deserializer)?;
+        Self::new(collection).map_err(|(e, _)| serde::de::Error::custom(e))
     }
 }

@@ -6,9 +6,11 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-std = ["alloc"]
-alloc = []
+std = ["alloc", "serde/std"]
+alloc = ["serde/alloc"]
+impl_serde = ["serde"]
 
-default = ["std"]
+default = ["std", "impl_serde"]
 
 [dependencies]
+serde = { version = "^1", default-features=false, features = ["derive"], optional=true}

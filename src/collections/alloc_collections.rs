@@ -1,4 +1,4 @@
-use alloc::collections;
+use alloc::{collections, vec::Vec, string::String};
 use core::ops::DerefMut;
 
 use crate::{LinearSizedCollection, ViewMut};

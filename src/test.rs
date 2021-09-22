@@ -1,3 +1,7 @@
+//! Module for generating automated tests 
+//!
+//! The easiest way is to use the [complete_test] macro for the type you implement [crate::LinearSizedCollection] for
+
 /// Test the coherence of a LinearSizedCollection. 
 ///
 /// $create has to be an expression which creates the LinearSizedCollection.
@@ -66,6 +70,7 @@ macro_rules! linear_collection_test {
 
 pub use linear_collection_test;
 
+/// Tests for SizeRestricted collection with the underlying collection being the tested type.
 #[macro_export]
 macro_rules! size_restricted_collection {
     ($create:expr, $name:ident) => {
@@ -132,15 +137,20 @@ macro_rules! size_restricted_collection {
 
 pub use size_restricted_collection;
 
+/// Creates a complete test suite for the type created with $create by creating using all other test macros.
+///
+/// $name should be the name of the test module and $create has to be an expression which creates an instance of the type to be tested.
 #[macro_export]
 macro_rules! complete_test {
     ($create:expr, $name:ident) => {
         #[cfg(test)]
         mod $name {
+            #[cfg(test)]
             mod linear_collection_test {
                 $crate::test::linear_collection_test!($create, $name);
             }
 
+            #[cfg(test)]
             mod size_restricted_collection {
                 $crate::test::size_restricted_collection!($create, $name);
             }
