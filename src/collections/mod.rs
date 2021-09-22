@@ -1,4 +1,4 @@
-mod std_collections;
+mod alloc_collections;
 
-#[cfg(any(feature="std", feature="alloc"))]
-pub use std_collections::*;
+#[cfg(feature = "alloc")]
+pub use alloc_collections::*;
