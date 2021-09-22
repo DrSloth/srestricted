@@ -5,10 +5,9 @@ edition = "2018"
 repository = "https://github.com/DrSloth/srestricted"
 home = "https://github.com/DrSloth/srestricted"
 keywords = ["collections", "utility"]
+description = "A library to manage size restricted Rust collections"
 license = "MIT"
 readme = "README.md"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
 std = ["alloc", "serde/std"]
