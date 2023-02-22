@@ -1,4 +1,6 @@
-use alloc::{collections, vec::Vec, string::String};
+//! Implementations of [`LinearSizedCollection`] for alloc types
+
+use alloc::{collections, string::String, vec::Vec};
 use core::ops::DerefMut;
 
 use crate::{LinearSizedCollection, ViewMut};
@@ -13,18 +15,19 @@ impl<T> LinearSizedCollection<T> for alloc::vec::Vec<T> {
     }
 
     fn push(&mut self, val: T) {
-        self.push(val)
+        self.push(val);
     }
 
     fn shrink_to(&mut self, len: usize) {
-        self.truncate(len)
+        self.truncate(len);
     }
 
     fn reserve(&mut self, additional: usize) {
-        self.reserve(additional)
+        self.reserve(additional);
     }
 }
 
+// SAFETY: A slice can't mutate its containers length
 unsafe impl<'a, T: 'a> ViewMut<'a> for Vec<T> {
     type MutableView = &'a mut [T];
     fn view_mut(&'a mut self) -> Self::MutableView {
@@ -42,18 +45,19 @@ impl<T> LinearSizedCollection<T> for collections::VecDeque<T> {
     }
 
     fn push(&mut self, val: T) {
-        self.push_back(val)
+        self.push_back(val);
     }
 
     fn shrink_to(&mut self, len: usize) {
-        self.truncate(len)
+        self.truncate(len);
     }
 
     fn reserve(&mut self, additional: usize) {
-        self.reserve(additional)
+        self.reserve(additional);
     }
 }
 
+// SAFETY: A slice can't mutate its containers length
 unsafe impl<'a, T: 'a> ViewMut<'a> for collections::VecDeque<T> {
     type MutableView = &'a mut [T];
     fn view_mut(&'a mut self) -> Self::MutableView {
@@ -71,7 +75,7 @@ impl<T> LinearSizedCollection<T> for collections::LinkedList<T> {
     }
 
     fn push(&mut self, val: T) {
-        self.push_back(val)
+        self.push_back(val);
     }
 
     fn reserve(&mut self, _additional: usize) {}
@@ -87,11 +91,11 @@ impl LinearSizedCollection<char> for String {
     }
 
     fn push(&mut self, val: char) {
-        self.push(val)
+        self.push(val);
     }
 
     fn reserve(&mut self, additional: usize) {
-        self.reserve(additional)
+        self.reserve(additional);
     }
 }
 

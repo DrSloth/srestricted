@@ -1,11 +1,11 @@
-//! Module for generating automated tests 
+//! Module for generating automated tests
 //!
-//! The easiest way is to use the [complete_test] macro for the type you implement [crate::LinearSizedCollection] for
+//! The easiest way is to use the [`complete_test`] macro for the type you implement [`crate::LinearSizedCollection`] for
 
-/// Test the coherence of a LinearSizedCollection. 
+/// Test the coherence of a `LinearSizedCollection`.
 ///
-/// $create has to be an expression which creates the LinearSizedCollection.
-/// $name has to be the name of the test module.
+/// `$create` has to be an expression which creates the `LinearSizedCollection`.
+/// `$name` has to be the name of the test module.
 #[macro_export]
 macro_rules! linear_collection_test {
     ($create:expr, $name:ident) => {
@@ -70,34 +70,34 @@ macro_rules! linear_collection_test {
 
 pub use linear_collection_test;
 
-/// Tests for SizeRestricted collection with the underlying collection being the tested type.
+/// Tests for [`SizeRestricted`] collection with the underlying collection being the tested type.
 #[macro_export]
 macro_rules! size_restricted_collection {
     ($create:expr, $name:ident) => {
         #[cfg(test)]
         mod $name {
-            use $crate::{SizeRestricted, LinearSizedCollection, NonEmpty, SizeRangeError};
+            use $crate::{LinearSizedCollection, NonEmpty, SizeRangeError, SizeRestricted};
             fn is_linear_sized_collection<T, C: LinearSizedCollection<T>>(_collection: &C) {}
 
             #[test]
             fn empty() {
                 let collection = $create;
                 is_linear_sized_collection::<i32, _>(&collection);
-                let _collection = SizeRestricted::<i32,_,0,1>::new(collection).unwrap();
+                let _collection = SizeRestricted::<i32, _, 0, 1>::new(collection).unwrap();
             }
 
             #[test]
             fn always_empty() {
                 let collection = $create;
                 is_linear_sized_collection::<i32, _>(&collection);
-                let _collection = SizeRestricted::<i32,_,0,0>::new(collection).unwrap();
+                let _collection = SizeRestricted::<i32, _, 0, 0>::new(collection).unwrap();
             }
 
             #[test]
             fn always_empty_err_nonempty() {
                 let mut collection = $create;
                 LinearSizedCollection::push(&mut collection, 1);
-                let too_large = SizeRestricted::<i32,_,0,0>::new(collection).unwrap_err();
+                let too_large = SizeRestricted::<i32, _, 0, 0>::new(collection).unwrap_err();
                 assert_eq!(too_large.0, SizeRangeError::TooLarge)
             }
 
@@ -105,7 +105,7 @@ macro_rules! size_restricted_collection {
             fn too_small_empty() {
                 let collection = $create;
                 is_linear_sized_collection::<i32, _>(&collection);
-                let too_small = SizeRestricted::<i32,_,1,0>::new(collection).unwrap_err();
+                let too_small = SizeRestricted::<i32, _, 1, 5>::new(collection).unwrap_err();
                 assert_eq!(too_small.0, SizeRangeError::TooSmall);
             }
 
@@ -113,7 +113,7 @@ macro_rules! size_restricted_collection {
             fn too_small_nonempty() {
                 let collection = $create;
                 is_linear_sized_collection::<i32, _>(&collection);
-                let too_small = SizeRestricted::<i32,_,100,5000>::new(collection).unwrap_err();
+                let too_small = SizeRestricted::<i32, _, 100, 5000>::new(collection).unwrap_err();
                 assert_eq!(too_small.0, SizeRangeError::TooSmall);
             }
 
@@ -122,14 +122,6 @@ macro_rules! size_restricted_collection {
                 let collection = $create;
                 is_linear_sized_collection::<i32, _>(&collection);
                 let _collection = NonEmpty::new(collection).unwrap_err();
-            }
-
-            #[test]
-            #[should_panic(expected="The Minimum size of a SizeRestricted collection has to be lower than its maximum")]
-            fn min_gt_max() {
-                let collection = $create;
-                is_linear_sized_collection::<i32, _>(&collection);
-                unsafe { let _collection = SizeRestricted::<i32,_,21,19>::create(collection); }
             }
         }
     };

@@ -17,4 +17,4 @@ impl_serde = ["serde"]
 default = ["std", "impl_serde"]
 
 [dependencies]
-serde = { version = "^1", default-features=false, features = ["derive"], optional=true}
+serde = { version = "1.0.152", default-features=false, features = ["derive"], optional=true}
